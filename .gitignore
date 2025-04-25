@@ -1,6 +1,4 @@
 .env
-acme.json
-traefik_letsencrypt/
 *.db
 *.log
-
+full-config.yml
