@@ -63,11 +63,33 @@ services:
       - "traefik.http.routers.nextcloud.middlewares=nextcloud-headers@docker"
       - "traefik.http.middlewares.nextcloud-headers.headers.stsSeconds=15552000"
       - "traefik.http.middlewares.nextcloud-headers.headers.stsIncludeSubdomains=true"
-
     depends_on:
       - postgres
       - redis
     restart: unless-stopped
+
+  collabora:
+    image: collabora/code:latest
+    container_name: collabora
+    environment:
+      - domain=${DUCKDNS_DOMAIN}
+      - username=${COLLABORA_ADMIN_USER}           
+      - password=${COLLABORA_PASS} 
+      - server_name=collabora.${DUCKDNS_DOMAIN}
+      - extra_params=--o:ssl.enable=false --o:ssl.termination=true --o:storage.wopi.host=https://elitedock.duckdns.org --o:storage.wopi.allowlist=https://elitedock.duckdns.org
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.collabora.rule=Host(`collabora.${DUCKDNS_DOMAIN}`)"
+      - "traefik.http.routers.collabora.entrypoints=websecure"
+      - "traefik.http.routers.collabora.tls.certresolver=lehttp"
+    networks:
+      - default
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9980/hosting/discovery"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
 volumes:
   traefik-cert:
