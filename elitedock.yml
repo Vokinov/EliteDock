@@ -55,6 +55,7 @@ services:
       - TRUSTED_DOMAINS=${DUCKDNS_DOMAIN}
     volumes:
       - nc-data:/var/www/html
+      - /mnt/ct500mx:/var/www/html/External:rw
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.nextcloud.rule=Host(`${DUCKDNS_DOMAIN}`)"
