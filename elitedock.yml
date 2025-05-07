@@ -51,11 +51,12 @@ services:
       - OVERWRITEPROTOCOL=https
       - OVERWRITEHOST=${DUCKDNS_DOMAIN}
       - OVERWRITECLIURL=https://${DUCKDNS_DOMAIN}
-      - TRUSTED_PROXIES=172.18.0.0/16
+      - TRUSTED_PROXIES=172.18.0.0/16 192.168.88.1
       - TRUSTED_DOMAINS=${DUCKDNS_DOMAIN}
+      - NEXTCLOUD__CONFIG__ALLOW_LOCAL_REMOTE_SERVERS=true
     volumes:
       - nc-data:/var/www/html
-      - /mnt/ct500mx:/var/www/html/External:rw
+      - /mnt/ct500mx:/mnt/ct500mx:rw,uid=33,gid=33 # server ssd disk serving as external storage
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.nextcloud.rule=Host(`${DUCKDNS_DOMAIN}`)"
@@ -70,24 +71,26 @@ services:
     restart: unless-stopped
 
   collabora:
-    image: collabora/code:latest
+    image: collabora/code:24.04.13.3.1
     container_name: collabora
     environment:
-      - domain=${DUCKDNS_DOMAIN}
-      - username=${COLLABORA_ADMIN_USER}           
-      - password=${COLLABORA_PASS} 
-      - server_name=collabora.${DUCKDNS_DOMAIN}
-      - extra_params=--o:ssl.enable=false --o:ssl.termination=true --o:storage.wopi.host=https://elitedock.duckdns.org --o:storage.wopi.allowlist=https://elitedock.duckdns.org
+      - domain=${DUCKDNS_DOMAIN_REGEX}             # Nextcloud’s FQDN
+      - server_name=${COLLABORA_DOMAIN}      # must match DuckDNS collabora hostname
+      - username=${COLLABORA_ADMIN_USER}
+      - password=${COLLABORA_PASS}
+      - extra_params=--o:ssl.enable=false --o:ssl.termination=true --o:storage.wopi.host=${DUCKDNS_DOMAIN_REGEX} --o:storage.wopi.allowlist=${DUCKDNS_DOMAIN_REGEX}
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.collabora.rule=Host(`collabora.${DUCKDNS_DOMAIN}`)"
+      - "traefik.http.routers.collabora.rule=Host(`${COLLABORA_DOMAIN}`)"
       - "traefik.http.routers.collabora.entrypoints=websecure"
+      - "traefik.http.routers.collabora.tls=true"
       - "traefik.http.routers.collabora.tls.certresolver=lehttp"
+      - "traefik.http.services.collabora.loadbalancer.server.port=9980"
     networks:
       - default
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9980/hosting/discovery"]
+      test: ["CMD","curl","-f","http://localhost:9980/hosting/discovery"]
       interval: 30s
       timeout: 10s
       retries: 5
