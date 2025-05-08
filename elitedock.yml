@@ -10,6 +10,8 @@ services:
       - "--entrypoints.web.address=:80"
       - "--entrypoints.websecure.address=:443"
       - "--entrypoints.web.http.redirections.entryPoint.to=websecure"
+      - "--entrypoints.web.forwardedHeaders.insecure=true"
+      - "--entrypoints.websecure.forwardedHeaders.insecure=true"
       - "--certificatesresolvers.lehttp.acme.httpchallenge.entrypoint=web"
       - "--certificatesresolvers.lehttp.acme.email=${LETSENCRYPT_EMAIL}"
       - "--certificatesresolvers.lehttp.acme.storage=/etc/traefik/acme/acme.json"
@@ -23,7 +25,10 @@ services:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - "traefik-cert:/etc/traefik/acme"
     restart: unless-stopped
-    
+    networks:
+      default:
+        ipv4_address: 172.18.0.2
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -39,7 +44,7 @@ services:
     restart: unless-stopped
 
   nextcloud:
-    image: nextcloud:31-apache   
+    image: nextcloud:31.0.4-apache   
     environment:
       - POSTGRES_HOST=postgres
       - POSTGRES_DB=${POSTGRES_DB}
@@ -54,9 +59,10 @@ services:
       - TRUSTED_PROXIES=172.18.0.0/16 192.168.88.1
       - TRUSTED_DOMAINS=${DUCKDNS_DOMAIN}
       - NEXTCLOUD__CONFIG__ALLOW_LOCAL_REMOTE_SERVERS=true
+      - NEXTCLOUD__CONFIG__MAINTENANCE_WINDOW_START=2   # 02:00 UTC → 04:00–08:00 CEST
     volumes:
       - nc-data:/var/www/html
-      - /mnt/ct500mx:/mnt/ct500mx:rw,uid=33,gid=33 # server ssd disk serving as external storage
+      - /mnt/ct500mx:/mnt/ct500mx:rw,uid=33,gid=33 # server ssd disk serving as an external storage
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.nextcloud.rule=Host(`${DUCKDNS_DOMAIN}`)"
@@ -65,6 +71,9 @@ services:
       - "traefik.http.routers.nextcloud.middlewares=nextcloud-headers@docker"
       - "traefik.http.middlewares.nextcloud-headers.headers.stsSeconds=15552000"
       - "traefik.http.middlewares.nextcloud-headers.headers.stsIncludeSubdomains=true"
+    extra_hosts:
+      - "collabora-elitedock.duckdns.org:172.18.0.2"
+      - "elitedock.duckdns.org:172.18.0.2"
     depends_on:
       - postgres
       - redis
@@ -74,7 +83,7 @@ services:
     image: collabora/code:24.04.13.3.1
     container_name: collabora
     environment:
-      - domain=${DUCKDNS_DOMAIN_REGEX}             # Nextcloud’s FQDN
+      - domain=${DUCKDNS_DOMAIN_REGEX}       # Nextcloud’s FQDN with escaped special signs
       - server_name=${COLLABORA_DOMAIN}      # must match DuckDNS collabora hostname
       - username=${COLLABORA_ADMIN_USER}
       - password=${COLLABORA_PASS}
@@ -86,14 +95,24 @@ services:
       - "traefik.http.routers.collabora.tls=true"
       - "traefik.http.routers.collabora.tls.certresolver=lehttp"
       - "traefik.http.services.collabora.loadbalancer.server.port=9980"
-    networks:
-      - default
+    extra_hosts:
+      - "elitedock.duckdns.org:172.18.0.2"
     restart: unless-stopped
     healthcheck:
       test: ["CMD","curl","-f","http://localhost:9980/hosting/discovery"]
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      default:
+        ipv4_address: 172.18.0.3
+
+networks:
+  default:
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.18.0.0/16
 
 volumes:
   traefik-cert:
